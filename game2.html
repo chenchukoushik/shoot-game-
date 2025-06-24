@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Crazy Mobile Battle</title>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: monospace;
+      color: white;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+      background: radial-gradient(circle, #222 0%, #000 100%);
+      border: 2px solid lime;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 18px;
+      z-index: 10;
+      color: white;
+    }
+    #shootBtn {
+      position: absolute;
+      right: 20px;
+      bottom: 40px;
+      background: red;
+      color: white;
+      border: none;
+      padding: 15px;
+      border-radius: 50%;
+      font-size: 20px;
+      z-index: 10;
+      touch-action: none;
+    }
+    #joystickArea {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: rgba(0, 255, 0, 0.3);
+      z-index: 10;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    ❤️ <span id="health">100</span> | 💀 Enemies Left: <span id="enemies">0</span>
+  </div>
+  <canvas id="game" width="800" height="500"></canvas>
+  <button id="shootBtn">🔫</button>
+  <div id="joystickArea"></div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const healthUI = document.getElementById("health");
+    const enemyUI = document.getElementById("enemies");
+    const shootBtn = document.getElementById("shootBtn");
+    const joystick = document.getElementById("joystickArea");
+
+    let keys = {};
+    let bullets = [];
+    let enemies = [];
+    let playing = true;
+    let joystickTouch = null;
+    let moveX = 0, moveY = 0;
+
+    let safeZone = { x: 100, y: 100, w: 600, h: 300 };
+
+    const player = {
+      x: 400,
+      y: 250,
+      size: 20,
+      speed: 3,
+      health: 100
+    };
+
+    function shoot() {
+      const angle = Math.atan2(0, 1); // Default straight right
+      bullets.push({
+        x: player.x,
+        y: player.y,
+        dx: Math.cos(angle) * 6,
+        dy: Math.sin(angle) * 6,
+        radius: 4
+      });
+    }
+
+    shootBtn.addEventListener("click", shoot);
+
+    function spawnEnemies(count) {
+      for (let i = 0; i < count; i++) {
+        enemies.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: 20,
+          speed: 1 + Math.random(),
+          health: 20
+        });
+      }
+    }
+
+    function movePlayer() {
+      player.x += moveX * player.speed;
+      player.y += moveY * player.speed;
+    }
+
+    function update() {
+      if (!playing) return;
+
+      movePlayer();
+
+      bullets.forEach((b, i) => {
+        b.x += b.dx;
+        b.y += b.dy;
+        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+          bullets.splice(i, 1);
+        }
+      });
+
+      enemies.forEach((e, i) => {
+        const dx = player.x - e.x;
+        const dy = player.y - e.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 0) {
+          e.x += (dx / dist) * e.speed;
+          e.y += (dy / dist) * e.speed;
+        }
+        if (dist < 20) player.health -= 0.3;
+
+        bullets.forEach((b, j) => {
+          const d = Math.hypot(b.x - e.x, b.y - e.y);
+          if (d < e.size) {
+            e.health -= 10;
+            bullets.splice(j, 1);
+          }
+        });
+
+        if (e.health <= 0) enemies.splice(i, 1);
+      });
+
+      // Safe zone shrink
+      safeZone.x += 0.02;
+      safeZone.y += 0.02;
+      safeZone.w -= 0.04;
+      safeZone.h -= 0.04;
+
+      // Check if player outside safe zone
+      if (
+        player.x < safeZone.x ||
+        player.x > safeZone.x + safeZone.w ||
+        player.y < safeZone.y ||
+        player.y > safeZone.y + safeZone.h
+      ) {
+        player.health -= 0.2;
+      }
+
+      healthUI.textContent = Math.max(0, Math.floor(player.health));
+      enemyUI.textContent = enemies.length;
+
+      if (player.health <= 0) {
+        playing = false;
+        setTimeout(() => alert("💀 GAME OVER"), 300);
+      }
+
+      if (enemies.length === 0) {
+        playing = false;
+        setTimeout(() => alert("🏆 YOU WIN!"), 300);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(safeZone.x, safeZone.y, safeZone.w, safeZone.h);
+
+      // Player
+      ctx.fillStyle = "lime";
+      ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
+
+      // Bullets
+      ctx.fillStyle = "yellow";
+      bullets.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Enemies
+      ctx.fillStyle = "crimson";
+      enemies.forEach(e => {
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ========== Joystick ==========
+    joystick.addEventListener("touchstart", e => {
+      e.preventDefault();
+      joystickTouch = e.touches[0].identifier;
+    });
+
+    joystick.addEventListener("touchmove", e => {
+      e.preventDefault();
+      for (let t of e.touches) {
+        if (t.identifier === joystickTouch) {
+          const rect = joystick.getBoundingClientRect();
+          const dx = t.clientX - rect.left - 50;
+          const dy = t.clientY - rect.top - 50;
+          const mag = Math.hypot(dx, dy);
+          if (mag > 0) {
+            moveX = dx / mag;
+            moveY = dy / mag;
+          }
+        }
+      }
+    });
+
+    joystick.addEventListener("touchend", e => {
+      moveX = 0;
+      moveY = 0;
+    });
+
+    spawnEnemies(10);
+    gameLoop();
+  </script>
+</body>
+</html>
